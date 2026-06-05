@@ -25,26 +25,181 @@ Faker.seed(42)
 
 # ── Paramètres ───────────────────────────────────────────────────────────────
 NB_USERS     = 500
-INTERESTS    = ["fitness", "musique", "technologie", "cuisine", "voyage", "cinema"]
-ALPHA        = [3.0, 2.5, 2.0, 1.5, 1.0, 0.5]
+INTERESTS = [
+    "fitness", "musique", "technologie", "cuisine", "voyage",
+    "cinema", "lecture", "gaming", "mode", "photo",
+]
+
+ALPHA = [3.0, 2.8, 2.2, 1.8, 1.5, 1.3, 1.1, 0.9, 0.7, 0.5]
 INTEREST_PROBS = stats.dirichlet.rvs(alpha=ALPHA, random_state=42)[0]
 
 ACTIONS = {
-    "fitness":     ["watched workout video", "bought protein powder", "liked gym post", "joined gym"],
-    "musique":     ["watched music video", "bought headphones", "liked song", "attended concert", "streamed album"],
-    "technologie": ["watched AI talk", "read tech blog", "bought laptop", "bought smartwatch", "liked AI article", "contributed to open source"],
-    "cuisine":     ["watched cooking show", "bought ingredients", "liked recipe post", "tried new recipe", "bought kitchen gadget"],
-    "voyage":      ["watched travel vlog", "booked flight", "bought luggage", "liked travel photo", "checked into hotel"],
-    "cinema":      ["watched movie", "watched trailer", "bought streaming sub", "rated film", "bought cinema ticket"],
+    "fitness": [
+        "watched workout video", "watched yoga tutorial", "watched HIIT session",
+        "bought protein powder", "bought resistance bands", "bought running shoes",
+        "liked gym post", "liked transformation photo", "liked fitness reel",
+        "joined gym", "completed 30-day challenge", "tracked morning run",
+        "read fitness blog", "shared meal prep tip", "followed fitness influencer",
+    ],
+    "musique": [
+        "watched music video", "watched live concert stream", "watched guitar tutorial",
+        "bought headphones", "bought concert ticket", "bought vinyl record",
+        "liked song", "liked album review", "liked playlist share",
+        "attended concert", "streamed album", "created playlist",
+        "shared song recommendation", "followed artist", "downloaded podcast episode",
+    ],
+    "technologie": [
+        "watched AI talk", "watched coding tutorial", "watched product review",
+        "read tech blog", "read AI research paper", "read dev newsletter",
+        "bought laptop", "bought smartwatch", "bought mechanical keyboard",
+        "liked AI article", "liked startup post", "liked dev project",
+        "contributed to open source", "completed coding challenge",
+        "starred GitHub repo", "deployed side project", "followed tech influencer",
+    ],
+    "cuisine": [
+        "watched cooking show", "watched recipe tutorial", "watched baking masterclass",
+        "bought ingredients", "bought kitchen gadget", "bought cookbook",
+        "liked recipe post", "liked food photo", "liked chef video",
+        "tried new recipe", "meal prepped for the week", "visited food market",
+        "shared recipe", "followed chef", "reviewed restaurant",
+    ],
+    "voyage": [
+        "watched travel vlog", "watched destination guide", "watched packing tips video",
+        "booked flight", "booked hotel", "booked guided tour",
+        "bought luggage", "bought travel adapter", "bought travel insurance",
+        "liked travel photo", "liked itinerary post",
+        "checked into hotel", "reviewed attraction", "shared travel tip",
+        "followed travel blogger", "saved destination pin",
+    ],
+    "cinema": [
+        "watched movie", "watched trailer", "watched behind the scenes",
+        "watched documentary", "watched film analysis",
+        "bought streaming sub", "bought cinema ticket", "bought box set",
+        "rated film", "liked movie review", "liked actor post",
+        "created watchlist", "shared film recommendation", "followed film critic",
+        "attended film festival",
+    ],
+    "lecture": [
+        "read fiction novel", "read sci-fi book", "read biography",
+        "read self-help book", "read manga",
+        "bought ebook", "bought physical book", "bought audiobook",
+        "liked book review", "liked reading list", "liked author quote",
+        "joined book club", "shared book recommendation", "followed author",
+        "highlighted passage", "finished reading challenge",
+    ],
+    "gaming": [
+        "watched game walkthrough", "watched esports tournament", "watched game review",
+        "bought game", "bought gaming headset", "bought controller",
+        "liked game clip", "liked streamer highlight", "liked game announcement",
+        "played multiplayer session", "completed story mode", "joined gaming community",
+        "shared gameplay clip", "followed streamer", "participated in beta test",
+    ],
+    "mode": [
+        "watched fashion show", "watched styling tips video", "watched haul video",
+        "bought clothing", "bought sneakers", "bought accessories",
+        "liked outfit post", "liked streetwear photo", "liked brand post",
+        "followed fashion influencer", "saved outfit inspiration",
+        "shared outfit of the day", "visited boutique", "subscribed to brand newsletter",
+        "reviewed purchase",
+    ],
+    "photo": [
+        "watched photography tutorial", "watched editing walkthrough", "watched gear review",
+        "bought camera lens", "bought tripod", "bought editing software",
+        "liked photo", "liked photography tip", "liked landscape shot",
+        "edited photo in Lightroom", "uploaded photo portfolio",
+        "joined photo community", "shared photography tip", "followed photographer",
+        "entered photo contest",
+    ],
 }
 
 CONTENT_CATALOG = {
-    "fitness":     ["Programme HIIT 30 min", "Yoga débutant — 7 jours", "Plan nutrition semaine", "Top 10 exercices cardio", "Guide musculation maison"],
-    "musique":     ["Playlist Rock 2024", "Top Jazz lo-fi", "Concerts à venir près de chez vous", "Histoire du Hip-Hop", "Playlist focus & productivité"],
-    "technologie": ["Blog IA du MIT", "Podcast No Code", "Cours Python avancé", "Les dernières avancées en LLM", "Guide débutant open source"],
-    "cuisine":     ["Recettes végétariennes rapides", "Cours pâtisserie en ligne", "Top ustensiles 2024", "Cuisine du monde en 30 min", "Meal prep de la semaine"],
-    "voyage":      ["Top destinations 2024", "Guide voyage solo", "Astuces bagages cabine", "Applications voyage indispensables", "Road trips Europe"],
-    "cinema":      ["Top films Netflix ce mois", "Les classiques à voir absolument", "Documentaires tendance", "Podcast analyse cinéma", "Films primés aux Oscars 2024"],
+    "fitness": [
+        "Programme HIIT 30 min", "Yoga débutant — 7 jours", "Plan nutrition semaine",
+        "Top 10 exercices cardio", "Guide musculation maison", "Programme running 5K",
+        "Stretching post-entraînement", "Recettes smoothies protéinés",
+        "Challenge 30 jours abdos", "Guide crossfit débutant",
+        "Podcast motivation sportive", "Suivi sommeil & récupération",
+        "Programme pilates 4 semaines", "Guide étirements matinaux",
+    ],
+    "musique": [
+        "Playlist Rock 2024", "Top Jazz lo-fi", "Concerts à venir près de chez vous",
+        "Histoire du Hip-Hop", "Playlist focus & productivité",
+        "Cours guitare en ligne", "Introduction au piano", "Playlist chill soirée",
+        "Top albums de l'année", "Guide production musicale",
+        "Playlist entraînement haute énergie", "Découvertes indie de la semaine",
+        "Cours chant débutant", "Podcast histoire de la musique",
+    ],
+    "technologie": [
+        "Blog IA du MIT", "Podcast No Code", "Cours Python avancé",
+        "Les dernières avancées en LLM", "Guide débutant open source",
+        "Tutoriel Docker & déploiement", "Introduction au machine learning",
+        "Top outils dev 2024", "Guide cybersécurité personnel",
+        "Cours JavaScript moderne", "Newsletter tech hebdomadaire",
+        "Tutoriel API REST", "Guide AWS débutant",
+        "Veille innovation tech", "Atelier data visualization",
+    ],
+    "cuisine": [
+        "Recettes végétariennes rapides", "Cours pâtisserie en ligne",
+        "Top ustensiles 2024", "Cuisine du monde en 30 min",
+        "Meal prep de la semaine", "Guide épices & assaisonnements",
+        "Recettes healthy batch cooking", "Cours sushis maison",
+        "Top recettes Instagram cette semaine", "Guide fermentation",
+        "Plan alimentaire équilibré", "Cours cuisine méditerranéenne",
+        "Recettes smoothie bowl", "Guide vins & accords",
+    ],
+    "voyage": [
+        "Top destinations 2024", "Guide voyage solo", "Astuces bagages cabine",
+        "Applications voyage indispensables", "Road trips Europe",
+        "Guide voyage budget", "Top plages secrètes", "Itinéraire Asie du Sud-Est",
+        "Guide voyage digital nomad", "Top Airbnb insolites",
+        "Conseils jet lag", "Guide camping sauvage",
+        "Top parcs nationaux", "Voyage culturel au Japon",
+    ],
+    "cinema": [
+        "Top films Netflix ce mois", "Les classiques à voir absolument",
+        "Documentaires tendance", "Podcast analyse cinéma",
+        "Films primés aux Oscars 2024", "Séries binge-watching du moment",
+        "Guide cinéma asiatique", "Top thrillers psychologiques",
+        "Sélection festival de Cannes", "Films d'animation à ne pas rater",
+        "Cinéma africain émergent", "Top documentaires nature",
+        "Guide cinéma indépendant", "Rétrospective Spielberg",
+    ],
+    "lecture": [
+        "Top romans 2024", "Club de lecture en ligne", "Bibliothèque numérique gratuite",
+        "Sélection science-fiction incontournable", "Guide speed reading",
+        "Top biographies inspirantes", "Sélection développement personnel",
+        "Meilleurs mangas du moment", "Podcast littéraire hebdomadaire",
+        "Liste livres à lire avant 30 ans", "Guide Goodreads",
+        "Top thrillers littéraires", "Sélection poésie contemporaine",
+        "Newsletter livres & café",
+    ],
+    "gaming": [
+        "Top jeux 2024", "Guide esports & compétition", "Sélection jeux indé",
+        "Tutoriel streaming Twitch", "Top jeux coopératifs",
+        "Guide build PC gaming", "Sélection jeux narrative",
+        "Top FPS compétitifs", "Découvertes roguelike",
+        "Guide gaming mobile", "Sélection jeux stratégie",
+        "Podcast gaming hebdomadaire", "Top jeux RPG",
+        "Calendrier sorties jeux",
+    ],
+    "mode": [
+        "Tendances mode printemps 2024", "Guide streetwear",
+        "Top marques éco-responsables", "Lookbook minimaliste",
+        "Guide sneakers 2024", "Astuces dressing capsule",
+        "Sélection accessoires tendance", "Guide taille & fit",
+        "Top vintage & seconde main", "Inspiration street style Tokyo",
+        "Guide colorimétrie", "Podcast mode & culture",
+        "Sélection montres abordables", "Lookbook bureau chic",
+    ],
+    "photo": [
+        "Cours photo débutant", "Guide composition & cadrage",
+        "Top spots photo dans votre ville", "Tutoriel Lightroom",
+        "Guide astrophotographie", "Top appareils photo 2024",
+        "Cours retouche portrait", "Inspiration photo de rue",
+        "Guide photographie de voyage", "Tutoriel Photoshop",
+        "Top comptes photo Instagram", "Guide photo paysage",
+        "Atelier photo produit", "Cours photo événementielle",
+    ],
 }
 
 # ── Fonctions données ─────────────────────────────────────────────────────────
@@ -59,7 +214,7 @@ def generate_users(n=NB_USERS):
     profiles = []
     for i in range(n):
         age = int(np.clip(np.random.normal(loc=35, scale=10), 18, 65))
-        nb_interests = random.randint(1, 6)
+        nb_interests = random.randint(1, 8)
         interests = list(np.random.choice(INTERESTS, size=nb_interests, replace=False, p=INTEREST_PROBS))
         user_actions = {}
         for interest in interests:
@@ -120,7 +275,11 @@ class RecommendationEngine:
         user_logs  = self.logs_df[self.logs_df["user_id"] == user_id]
         category_counts = user_logs["category"].dropna().value_counts() if not user_logs.empty else pd.Series()
         sorted_interests = sorted(interests, key=lambda x: category_counts.get(x, 0), reverse=True)
-        dominant_type = user_logs["action_type"].dropna().value_counts().idxmax() if not user_logs.empty and len(user_logs) > 0 else "view"
+        dominant_type = "view"
+        if not user_logs.empty and "action_type" in user_logs.columns:
+            type_counts = user_logs["action_type"].dropna().value_counts()
+            if not type_counts.empty:
+                dominant_type = type_counts.idxmax()
         recommendations = []
         for interest in sorted_interests:
             if interest not in self.catalog: continue
@@ -171,18 +330,19 @@ class RecommendationEngine:
             results.append({"category": cat, "recommendations": items})
         return results
 
-# ── Cache Streamlit ───────────────────────────────────────────────────────────
-@st.cache_data
-def load_data():
+# ── Initialisation session_state ──────────────────────────────────────────────
+if "users_df" not in st.session_state:
     profiles = generate_users()
     users_df, logs_df = profiles_to_dataframes(profiles)
     logs_df = inject_noise(logs_df)
     users_df, logs_df = clean_data(users_df, logs_df)
-    return users_df, logs_df
+    st.session_state.users_df = users_df
+    st.session_state.logs_df  = logs_df
+    st.session_state.engine   = RecommendationEngine(users_df, logs_df)
 
-# ── Chargement ────────────────────────────────────────────────────────────────
-users_df, logs_df = load_data()
-engine = RecommendationEngine(users_df, logs_df)
+users_df = st.session_state.users_df
+logs_df  = st.session_state.logs_df
+engine   = st.session_state.engine
 
 # ════════════════════════════════════════════════════════════════════════════
 # INTERFACE
@@ -194,13 +354,14 @@ st.caption("Système de recommandation basé sur les profils et comportements ut
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("👤 Sélection utilisateur")
-    user_id = st.slider("ID utilisateur", 1, NB_USERS, 1)
+    max_id = int(users_df["user_id"].max())  # ← DYNAMIQUE
+    user_id = st.slider("ID utilisateur", 1, max_id, 1)
     user    = users_df[users_df["user_id"] == user_id].iloc[0]
     st.markdown(f"**{user['name']}**")
     st.markdown(f"Âge : {user['age']} ans")
     st.markdown(f"Intérêts : {', '.join(user['interests'])}")
     st.divider()
-    page = st.radio("Navigation", ["🏠 Recommandations", "📊 Analyse", "📈 Visualisations"])
+    page = st.radio("Navigation", ["🏠 Recommandations", "📊 Analyse", "📈 Visualisations", "➕ Ajouter un utilisateur"])
 
 # ════════════════════════════════════════════════════════════════════════
 # PAGE 1 — RECOMMANDATIONS
@@ -211,7 +372,7 @@ if page == "🏠 Recommandations":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("#### 🎯 Basées sur vos intérêts")
+        st.markdown("#### 🎯 Basées sur vos intérêts et activités")
         recs = engine.recommend(user_id)
         for block in recs:
             with st.expander(f"**{block['interest'].upper()}** — activité : {block['dominant_type']}"):
@@ -219,20 +380,23 @@ if page == "🏠 Recommandations":
                     st.markdown(f"- {item}")
 
     with col2:
-        st.markdown("#### 👥 Découvertes collaboratives")
-        similar  = engine.find_similar(user_id)
+        st.markdown("#### 👥 Découvertes basées sur des profils similaires")
+        similar = engine.find_similar(user_id)
         if similar:
+            st.markdown("**Utilisateurs similaires :**")
             for uid, name, score in similar:
                 st.markdown(f"- {name} *(similarité : {score:.2f})*")
-        st.divider()
+            st.divider()
+
         collab = engine.recommend_from_similar(user_id)
         if collab:
+            st.markdown("**Catégories découvertes :**")
             for block in collab:
                 with st.expander(f"**{block['category'].upper()}** — profils similaires"):
                     for item in block["recommendations"]:
                         st.markdown(f"- {item}")
         else:
-            st.info("Pas de nouvelles catégories à découvrir.")
+            st.info("Vos intérêts couvrent déjà les catégories populaires de vos profils similaires. Essayez d'explorer d'autres utilisateurs !")
 
 # ════════════════════════════════════════════════════════════════════════
 # PAGE 2 — ANALYSE
@@ -240,13 +404,11 @@ if page == "🏠 Recommandations":
 elif page == "📊 Analyse":
     st.subheader("Analyse statistique")
 
-    # Nettoyage
     logs_clean = logs_df.drop_duplicates().dropna().reset_index(drop=True)
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Utilisateurs", len(users_df))
     col2.metric("Logs nettoyés", len(logs_clean))
-    col3.metric("Heure de pointe", f"{int(logs_clean.groupby('hour').size().idxmax())}h")
 
     st.divider()
 
@@ -294,12 +456,16 @@ elif page == "📈 Visualisations":
     with tab1:
         interests_exploded = users_df["interests"].explode()
         counts = interests_exploded.value_counts().sort_values()
-        fig, ax = plt.subplots(figsize=(9, 5))
-        bars = ax.barh(counts.index, counts.values, color=sns.color_palette("muted", len(counts)))
+        fig, ax = plt.subplots(figsize=(10, 6))
+        bars = ax.bar(counts.index, counts.values, color=sns.color_palette("muted", len(counts)))
         for bar, val in zip(bars, counts.values):
-            ax.text(bar.get_width() + 3, bar.get_y() + bar.get_height() / 2, str(val), va="center", fontsize=10)
-        ax.set_title("Répartition des intérêts des utilisateurs", fontsize=13)
-        ax.set_xlabel("Nombre d'utilisateurs")
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 5,
+                    str(val), ha="center", va="bottom", fontsize=10)
+        ax.set_title("Répartition des intérêts des utilisateurs", fontsize=14, pad=15)
+        ax.set_xlabel("Intérêt")
+        ax.set_ylabel("Nombre d'utilisateurs")
+        ax.set_ylim(0, counts.max() + 50)
+        plt.xticks(rotation=20)
         plt.tight_layout()
         st.pyplot(fig)
 
@@ -317,6 +483,7 @@ elif page == "📈 Visualisations":
         if "age_group" not in users_df.columns:
             users_df["age_group"] = users_df["age"].apply(lambda a: "18-25" if a < 26 else "26-40" if a < 41 else "41+")
             engine.users_df = users_df
+            st.session_state.users_df = users_df
         records = []
         for _, u in users_df.iterrows():
             for block in engine.recommend(u["user_id"]):
@@ -329,3 +496,73 @@ elif page == "📈 Visualisations":
         plt.xticks(rotation=20)
         plt.tight_layout()
         st.pyplot(fig)
+
+# ════════════════════════════════════════════════════════════════════════
+# PAGE 4 — AJOUTER UN UTILISATEUR
+# ════════════════════════════════════════════════════════════════════════
+elif page == "➕ Ajouter un utilisateur":
+    st.subheader("Ajouter un nouvel utilisateur")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        new_name = st.text_input("Nom", placeholder="ex. Kouassi Akré")
+        new_age  = st.slider("Âge", 18, 65, 25)
+
+    with col2:
+        new_interests = st.multiselect(
+            "Intérêts",
+            options=INTERESTS,
+            default=["fitness"]
+        )
+
+    available_actions = []
+    for interest in new_interests:
+        available_actions.extend(ACTIONS.get(interest, []))
+
+    new_actions = st.multiselect(
+        "Journal d'activité",
+        options=available_actions,
+        help="Actions cohérentes avec les intérêts choisis"
+    )
+
+    if st.button("✅ Ajouter l'utilisateur"):
+        if not new_name:
+            st.error("Le nom est obligatoire.")
+        elif not new_interests:
+            st.error("Sélectionne au moins un intérêt.")
+        else:
+            new_id   = st.session_state.users_df["user_id"].max() + 1
+            new_user = pd.DataFrame([{
+                "user_id":   new_id,
+                "name":      new_name,
+                "age":       new_age,
+                "interests": new_interests,
+            }])
+
+            base_date = datetime(2024, 1, 1)
+            new_logs  = []
+            for action in new_actions:
+                action_type = infer_action_type(action)
+                category    = next((cat for cat, acts in ACTIONS.items() if action in acts), None)
+                delta       = timedelta(days=random.randint(0, 180), hours=random.randint(0, 23))
+                ts          = base_date + delta
+                new_logs.append({
+                    "user_id":     new_id,
+                    "action":      action,
+                    "action_type": action_type,
+                    "category":    category,
+                    "timestamp":   ts,
+                    "hour":        ts.hour,
+                })
+
+            # Mettre à jour le session_state
+            st.session_state.users_df = pd.concat([st.session_state.users_df, new_user], ignore_index=True)
+            if new_logs:
+                st.session_state.logs_df = pd.concat([st.session_state.logs_df, pd.DataFrame(new_logs)], ignore_index=True)
+
+            # Mettre à jour le moteur
+            st.session_state.engine = RecommendationEngine(st.session_state.users_df, st.session_state.logs_df)
+
+            st.success(f"✅ **{new_name}** ajouté avec l'ID {new_id} !")
+            st.info("🔁 Retournez à la page **🏠 Recommandations** pour voir les suggestions pour ce nouvel utilisateur.")
