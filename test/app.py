@@ -227,8 +227,6 @@ def charger_donnees():
 
     rows = [generate_user() for _ in range(500)]
     df   = pd.DataFrame(rows)
-    # interests et activity_log sont déjà des chaînes 'elt1,elt2,...'
-    # → drop_duplicates fonctionne directement, sans colonnes temporaires
     df['age'] = df['age'].astype(float)
 
     # Injection de bruit
@@ -237,18 +235,35 @@ def charger_donnees():
 
     df = pd.concat([df, df.sample(n=10, random_state=42)], ignore_index=True)
 
-    # Nettoyage simple — drop_duplicates marche directement sur des chaînes
+    # Nettoyage
     df = df.drop_duplicates(subset=['name', 'age', 'interests', 'activity_log'])
     df = df.dropna(subset=['age', 'activity_log']).reset_index(drop=True)
 
-    return df
+    # ── Séparation en deux datasets ──────────────────────────────────────────
+    # Clé de jointure commune
+    df['user_id'] = df.index
 
-df = charger_donnees()
+    # Dataset 1 : profil utilisateur (données d'identité)
+    df_utilisateurs = df[['user_id', 'name', 'age']].copy().reset_index(drop=True)
+
+    # Dataset 2 : activités et intérêts (données comportementales)
+    df_activites = df[['user_id', 'interests', 'activity_log']].copy().reset_index(drop=True)
+
+    return df_utilisateurs, df_activites
+
+df_utilisateurs, df_activites = charger_donnees()
+
+# ── Jointure pour reconstituer le DataFrame complet utilisé par le reste de l'app ──
+df = df_utilisateurs.merge(df_activites, on='user_id').drop(columns=['user_id'])
 
 if 'moteur' not in st.session_state:
     st.session_state.moteur = MoteurRecommandation(df)
 if 'df' not in st.session_state:
     st.session_state.df = df
+if 'df_utilisateurs' not in st.session_state:
+    st.session_state.df_utilisateurs = df_utilisateurs
+if 'df_activites' not in st.session_state:
+    st.session_state.df_activites = df_activites
 
 moteur = st.session_state.moteur
 df     = st.session_state.df
@@ -347,11 +362,31 @@ elif page == "➕ Ajouter un utilisateur":
             nouveau_profil = ProfilUtilisateur(nouveau_nom, nouveau_age, nouveaux_interets, nouvelles_actions)
             st.session_state.moteur.profils.append(nouveau_profil)
 
+            # Nouvel identifiant
+            nouveau_user_id = st.session_state.df_utilisateurs['user_id'].max() + 1 if len(st.session_state.df_utilisateurs) > 0 else 0
+
+            # Mise à jour du dataset utilisateurs
+            nouvelle_ligne_user = pd.DataFrame([{
+                'user_id': nouveau_user_id,
+                'name':    nouveau_nom,
+                'age':     float(nouveau_age),
+            }])
+            st.session_state.df_utilisateurs = pd.concat([st.session_state.df_utilisateurs, nouvelle_ligne_user], ignore_index=True)
+
+            # Mise à jour du dataset activités
+            nouvelle_ligne_activite = pd.DataFrame([{
+                'user_id':      nouveau_user_id,
+                'interests':    liste_vers_chaine(nouveaux_interets),
+                'activity_log': liste_vers_chaine(nouvelles_actions),
+            }])
+            st.session_state.df_activites = pd.concat([st.session_state.df_activites, nouvelle_ligne_activite], ignore_index=True)
+
+            # Jointure pour maintenir df synchronisé
             nouvelle_ligne = pd.DataFrame([{
-                'name':        nouveau_nom,
-                'age':         float(nouveau_age),
-                'interests':   liste_vers_chaine(nouveaux_interets),   # chaîne dans le DataFrame
-                'activity_log':liste_vers_chaine(nouvelles_actions),
+                'name':         nouveau_nom,
+                'age':          float(nouveau_age),
+                'interests':    liste_vers_chaine(nouveaux_interets),
+                'activity_log': liste_vers_chaine(nouvelles_actions),
             }])
             st.session_state.df = pd.concat([st.session_state.df, nouvelle_ligne], ignore_index=True)
 
@@ -404,6 +439,17 @@ elif page == "📊 Analyse statistique":
     col1.metric("Utilisateurs", len(df_courant))
     col2.metric("Logs nettoyés", len(logs_clean))
     col3.metric("Intérêts disponibles", len(INTERESTS))
+
+    # ── Aperçu des deux datasets séparés ────────────────────────────────────
+    st.divider()
+    st.markdown("#### 📁 Datasets séparés")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("**`df_utilisateurs`** — Profils (identité)")
+        st.dataframe(st.session_state.df_utilisateurs.head(10), use_container_width=True)
+    with col_b:
+        st.markdown("**`df_activites`** — Activités & intérêts")
+        st.dataframe(st.session_state.df_activites.head(10), use_container_width=True)
     st.divider()
 
     # Chi² distribution des intérêts vs Dirichlet
