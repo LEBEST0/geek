@@ -1,0 +1,440 @@
+import streamlit as st
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy import stats
+from scipy.spatial.distance import cosine
+from functools import reduce
+from faker import Faker
+import ast
+import random
+
+st.set_page_config(page_title="Générateur de contenu IA", page_icon="🎯", layout="wide")
+
+# ── Reproductibilité ──────────────────────────────────────────────────────────
+np.random.seed(42)
+random.seed(42)
+Faker.seed(42)
+fake = Faker('fr_FR')
+
+# ── Paramètres ────────────────────────────────────────────────────────────────
+INTERESTS = [
+    "fitness", "musique", "technologie", "cuisine", "voyage",
+    "cinéma", "lecture", "gaming", "mode", "photographie"
+]
+ALPHA = [3.0, 2.8, 2.2, 1.8, 1.5, 1.3, 1.1, 0.9, 0.7, 0.5]
+INTEREST_PROBS = stats.dirichlet.rvs(alpha=ALPHA, random_state=42)[0]
+
+ACTIVITY_MAPPING = {
+    "fitness":      ["regardé une vidéo d'entraînement","regardé un tutoriel yoga","regardé une séance HIIT","acheté des protéines en poudre","acheté des bandes de résistance","acheté des chaussures de running","aimé une publication de salle de sport","aimé une photo de transformation","rejoint une salle de sport","complété un défi 30 jours","suivi une course matinale","lu un blog fitness","partagé un conseil nutrition"],
+    "musique":      ["regardé un clip musical","regardé un concert en direct","regardé un tutoriel guitare","acheté des écouteurs","acheté un billet de concert","acheté un vinyle","aimé une chanson","aimé une critique d'album","assisté à un concert","streamé un album","créé une playlist","partagé une recommandation musicale","suivi un artiste","téléchargé un épisode de podcast musical"],
+    "technologie":  ["regardé une conférence sur l'IA","regardé un tutoriel de programmation","regardé une revue de produit tech","lu un blog tech","lu un article de recherche en IA","lu une newsletter développeur","acheté un ordinateur portable","acheté une montre connectée","acheté un clavier mécanique","aimé un article sur l'IA","aimé une publication startup","contribué à l'open source","complété un défi de programmation","étoilé un dépôt GitHub","déployé un projet personnel"],
+    "cuisine":      ["regardé une émission culinaire","regardé un tutoriel recette","regardé un cours de pâtisserie","acheté des ingrédients","acheté un gadget de cuisine","acheté un livre de recettes","aimé une publication de recette","aimé une photo culinaire","essayé une nouvelle recette","préparé les repas de la semaine","visité un marché alimentaire","partagé une recette","suivi un chef","laissé un avis sur un restaurant"],
+    "voyage":       ["regardé un vlog de voyage","regardé un guide de destination","regardé des conseils de bagages","réservé un vol","réservé un hôtel","réservé une visite guidée","acheté une valise","acheté un adaptateur de voyage","acheté une assurance voyage","aimé une photo de voyage","aimé un itinéraire de voyage","enregistré dans un hôtel","laissé un avis sur une attraction","partagé un conseil de voyage","suivi un blogueur voyage"],
+    "cinéma":       ["regardé un film","regardé une bande-annonce","regardé les coulisses d'un film","regardé un documentaire","regardé une analyse cinématographique","acheté un abonnement streaming","acheté un billet de cinéma","noté un film","aimé une critique de film","créé une liste de films à voir","partagé une recommandation de film","suivi un critique de cinéma","assisté à un festival de cinéma"],
+    "lecture":      ["lu un roman","lu un livre de science-fiction","lu une biographie","lu un livre de développement personnel","lu un manga","acheté un ebook","acheté un livre papier","acheté un livre audio","aimé une critique de livre","aimé une liste de lecture","rejoint un club de lecture","partagé une recommandation de livre","suivi un auteur","terminé un défi lecture"],
+    "gaming":       ["regardé un walkthrough de jeu","regardé un tournoi esport","regardé une revue de jeu","acheté un jeu vidéo","acheté un casque gaming","acheté une manette","aimé un clip de jeu","joué en multijoueur","complété le mode histoire","rejoint une communauté gaming","partagé un clip de gameplay","suivi un streamer","participé à un test bêta"],
+    "mode":         ["regardé un défilé de mode","regardé des conseils stylisme","regardé une vidéo haul","acheté des vêtements","acheté des sneakers","acheté des accessoires","aimé une publication tenue","aimé une photo streetwear","suivi un influenceur mode","sauvegardé une inspiration tenue","partagé une tenue du jour","visité une boutique","laissé un avis sur un achat"],
+    "photographie": ["regardé un tutoriel photo","regardé un walkthrough de retouche","regardé une revue de matériel photo","acheté un objectif","acheté un trépied","acheté un logiciel de retouche","aimé une photo","aimé un conseil photo","retouché une photo sur Lightroom","mis en ligne un portfolio photo","rejoint une communauté photo","partagé un conseil photo","suivi un photographe","participé à un concours photo"],
+}
+
+RECOMMANDATIONS_PAR_INTERET = {
+    "fitness":      ["Programme HIIT 30 min","Plan nutrition semaine","Guide musculation maison","Défi 30 jours abdos","Programme running 5 km","Podcast motivation sportive"],
+    "musique":      ["Playlist Rock 2024","Top Jazz lo-fi","Cours guitare en ligne","Podcast histoire de la musique","Top albums de l'année","Découvertes indie de la semaine"],
+    "technologie":  ["Blog IA du MIT","Cours Python avancé","Guide débutant open source","Newsletter tech hebdomadaire","Introduction au machine learning","Tutoriel Docker & déploiement"],
+    "cuisine":      ["Recettes végétariennes rapides","Meal prep de la semaine","Cours pâtisserie en ligne","Guide épices et assaisonnements","Cuisine du monde en 30 min","Guide fermentation maison"],
+    "voyage":       ["Top destinations 2024","Guide voyage en solo","Astuces bagages cabine","Road trips en Europe","Guide voyage budget","Itinéraire Asie du Sud-Est"],
+    "cinéma":       ["Top films Netflix ce mois","Documentaires tendance","Top thrillers psychologiques","Rétrospective Spielberg","Guide cinéma indépendant","Sélection festival de Cannes"],
+    "lecture":      ["Top romans 2024","Sélection science-fiction","Top biographies inspirantes","Podcast littéraire hebdomadaire","Guide speed reading","Newsletter livres & café"],
+    "gaming":       ["Top jeux 2024","Sélection jeux indépendants","Top jeux coopératifs","Guide configuration PC gaming","Podcast gaming hebdomadaire","Calendrier des sorties jeux"],
+    "mode":         ["Tendances mode printemps 2024","Guide sneakers 2024","Lookbook minimaliste","Top vintage et seconde main","Guide colorimétrie","Astuces dressing capsule"],
+    "photographie": ["Cours photo débutant","Tutoriel Lightroom","Guide composition et cadrage","Top appareils photo 2024","Guide astrophotographie","Inspiration photo de rue"],
+}
+
+# ── Classes POO ───────────────────────────────────────────────────────────────
+class ProfilUtilisateur:
+    def __init__(self, name, age, interests, activity_log):
+        self.__name       = name
+        self.__age        = age
+        self.interests    = interests
+        self.activity_log = activity_log
+
+    @property
+    def name(self): return self.__name
+    @property
+    def age(self):  return self.__age
+
+    def vecteur_interets(self):
+        return np.array([1 if i in self.interests else 0 for i in INTERESTS], dtype=float)
+
+    def description(self):
+        return f"Utilisateur standard : {self.__name}, {self.__age} ans"
+
+
+class ProfilPremium(ProfilUtilisateur):
+    def __init__(self, name, age, interests, activity_log, niveau='gold'):
+        super().__init__(name, age, interests, activity_log)
+        self.niveau = niveau
+
+    def description(self):
+        return f"Utilisateur premium ({self.niveau}) : {self.name}, {self.age} ans"
+
+
+class MoteurRecommandation:
+    def __init__(self, df):
+        self.profils = [
+            ProfilUtilisateur(row['name'], row['age'], row['interests'], row['activity_log'])
+            for _, row in df.iterrows()
+        ]
+
+    def trouver_similaires(self, profil, top_n=5):
+        vecteur_cible = profil.vecteur_interets()
+        sims = []
+        for autre in self.profils:
+            if autre.name == profil.name: continue
+            v = autre.vecteur_interets()
+            if np.any(v):
+                sims.append((autre, round(1 - cosine(vecteur_cible, v), 3)))
+        return sorted(sims, key=lambda x: x[1], reverse=True)[:top_n]
+
+    def recommander(self, profil):
+        # Recommandations personnelles via filter / map / reduce
+        interets_valides = list(filter(lambda i: i in RECOMMANDATIONS_PAR_INTERET, profil.interests))
+        listes_reco      = list(map(lambda i: RECOMMANDATIONS_PAR_INTERET[i], interets_valides))
+        recos_perso      = reduce(lambda a, b: a + b, listes_reco) if listes_reco else []
+
+        # Bonus conditionnels selon les activités
+        bonus = []
+        if any('IA' in a or 'programmation' in a for a in profil.activity_log):
+            bonus.append('Formation Deep Learning gratuite')
+        if any('acheté' in a for a in profil.activity_log):
+            bonus.append('Offre exclusive : -20% sur votre prochain achat')
+        if profil.age < 25:
+            bonus.append('Programme jeune talent : 1 mois premium offert')
+
+        # Recommandations collaboratives
+        similaires = self.trouver_similaires(profil, top_n=5)
+        interets_similaires = []
+        for autre_profil, _ in similaires:
+            interets_similaires.extend(autre_profil.interests)
+        nouveaux_interets = set(interets_similaires) - set(profil.interests)
+        recos_collab = []
+        for interet in nouveaux_interets:
+            if interet in RECOMMANDATIONS_PAR_INTERET:
+                recos_collab.extend(RECOMMANDATIONS_PAR_INTERET[interet][:2])
+
+        return {
+            'suggestions_personnelles':   recos_perso,
+            'suggestions_collaboratives': recos_collab,
+            'bonus':                      bonus,
+            'utilisateurs_similaires':    [(p.name, s) for p, s in similaires[:3]],
+        }
+
+# ── Chargement des données ────────────────────────────────────────────────────
+@st.cache_data
+def charger_donnees():
+    def generate_user():
+        age = int(np.random.randint(18, 66))
+        nb  = np.random.randint(1, 4)
+        interests    = [str(x) for x in np.random.choice(INTERESTS, size=nb, replace=False, p=INTEREST_PROBS)]
+        activity_log = [str(np.random.choice(ACTIVITY_MAPPING[np.random.choice(interests)])) for _ in range(np.random.randint(3, 7))]
+        return {"name": fake.name(), "age": age, "interests": interests, "activity_log": activity_log}
+
+    rows = [generate_user() for _ in range(500)]
+    df   = pd.DataFrame(rows)
+
+    # S'assurer que interests et activity_log sont des listes Python (pas des np.array)
+    df['interests']    = df['interests'].apply(lambda x: list(x) if not isinstance(x, list) else x)
+    df['activity_log'] = df['activity_log'].apply(lambda x: list(x) if not isinstance(x, list) else x)
+
+    df['age'] = df['age'].astype(float)
+
+    # Injection de bruit
+    df.loc[np.random.choice(500, 25, replace=False), 'age'] = np.nan
+    df.loc[np.random.choice(500, 15, replace=False), 'activity_log'] = None
+    df = pd.concat([df, df.sample(n=10, random_state=42)], ignore_index=True)
+
+    # Nettoyage — utiliser des colonnes string pour la déduplication (les listes ne sont pas hashables)
+    df = df.dropna(subset=['age', 'activity_log']).reset_index(drop=True)
+    df['_interests_str']    = df['interests'].apply(str)
+    df['_activity_log_str'] = df['activity_log'].apply(str)
+    df = df.drop_duplicates(subset=['name', 'age', '_interests_str', '_activity_log_str'])
+    df = df.drop(columns=['_interests_str', '_activity_log_str']).reset_index(drop=True)
+
+    # Garantir que les colonnes listes sont bien des listes Python après toutes les opérations
+    df['interests']    = df['interests'].apply(lambda x: list(x) if not isinstance(x, list) else x)
+    df['activity_log'] = df['activity_log'].apply(lambda x: list(x) if not isinstance(x, list) else x)
+
+    return df
+
+df = charger_donnees()
+
+# Moteur dans session_state pour qu'il persiste entre les interactions
+if 'moteur' not in st.session_state:
+    st.session_state.moteur = MoteurRecommandation(df)
+if 'df' not in st.session_state:
+    st.session_state.df = df
+
+moteur = st.session_state.moteur
+df     = st.session_state.df
+
+# ── Interface ─────────────────────────────────────────────────────────────────
+st.title("🎯 Générateur de contenu personnalisé basé sur l'IA")
+st.caption("NumPy · Pandas · SciPy · Matplotlib · Seaborn · POO · Similarité cosinus")
+
+with st.sidebar:
+    st.header("Navigation")
+    page = st.radio("", [
+        "🏠 Recommandations",
+        "➕ Ajouter un utilisateur",
+        "📊 Analyse statistique",
+        "📈 Visualisations",
+    ])
+
+# ════════════════════════════════════════════════════════════════════════════
+# PAGE 1 — RECOMMANDATIONS
+# ════════════════════════════════════════════════════════════════════════════
+if page == "🏠 Recommandations":
+    st.subheader("Recommandations personnalisées")
+
+    noms = [p.name for p in moteur.profils]
+    nom_selectionne = st.selectbox("Choisir un utilisateur", noms)
+
+    profil = next(p for p in moteur.profils if p.name == nom_selectionne)
+    recos  = moteur.recommander(profil)
+
+    st.markdown(f"**Âge :** {profil.age} ans &nbsp;|&nbsp; **Intérêts :** {', '.join(profil.interests)}")
+    st.markdown(f"**Journal d'activité :** {', '.join(profil.activity_log)}")
+    st.divider()
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### 🎯 Suggestions personnalisées")
+        for r in recos['suggestions_personnelles']:
+            st.markdown(f"- {r}")
+        if recos['bonus']:
+            st.markdown("#### ★ Bonus")
+            for b in recos['bonus']:
+                st.success(f"★ {b}")
+
+    with col2:
+        st.markdown("#### 👥 Découvertes collaboratives")
+        if recos['suggestions_collaboratives']:
+            for r in recos['suggestions_collaboratives']:
+                st.markdown(f"- {r}")
+        else:
+            st.info("Pas de nouvelles catégories à découvrir.")
+        st.markdown("#### 🔗 Profils similaires")
+        for nom, score in recos['utilisateurs_similaires']:
+            st.markdown(f"- {nom} *(similarité : {score})*")
+
+    # Démonstration polymorphisme
+    premium = ProfilPremium(profil.name, profil.age, profil.interests, profil.activity_log)
+    st.caption(f"💎 {premium.description()}")
+
+# ════════════════════════════════════════════════════════════════════════════
+# PAGE 2 — AJOUTER UN UTILISATEUR
+# ════════════════════════════════════════════════════════════════════════════
+elif page == "➕ Ajouter un utilisateur":
+    st.subheader("Ajouter un nouvel utilisateur")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        nouveau_nom = st.text_input("Nom", placeholder="ex. Kouassi Akré")
+        nouveau_age = st.slider("Âge", 18, 65, 25)
+    with col2:
+        nouveaux_interets = st.multiselect("Intérêts", options=INTERESTS, default=["fitness"])
+
+    # Actions disponibles selon les intérêts sélectionnés
+    actions_disponibles = []
+    for i in nouveaux_interets:
+        actions_disponibles.extend(ACTIVITY_MAPPING.get(i, []))
+
+    nouvelles_actions = st.multiselect(
+        "Journal d'activité (actions cohérentes avec vos intérêts)",
+        options=actions_disponibles
+    )
+
+    if st.button("✅ Ajouter et générer les recommandations"):
+        if not nouveau_nom:
+            st.error("Le nom est obligatoire.")
+        elif not nouveaux_interets:
+            st.error("Sélectionnez au moins un intérêt.")
+        else:
+            nouveau_profil = ProfilUtilisateur(nouveau_nom, nouveau_age, nouveaux_interets, nouvelles_actions)
+            st.session_state.moteur.profils.append(nouveau_profil)
+
+            nouvelle_ligne = pd.DataFrame([{
+                'name': nouveau_nom, 'age': float(nouveau_age),
+                'interests': nouveaux_interets, 'activity_log': nouvelles_actions
+            }])
+            st.session_state.df = pd.concat([st.session_state.df, nouvelle_ligne], ignore_index=True)
+
+            recos = st.session_state.moteur.recommander(nouveau_profil)
+
+            st.success(f"✅ **{nouveau_nom}** ajouté avec succès !")
+            st.divider()
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("#### 🎯 Suggestions personnalisées")
+                for r in recos['suggestions_personnelles']:
+                    st.markdown(f"- {r}")
+                if recos['bonus']:
+                    st.markdown("#### ★ Bonus")
+                    for b in recos['bonus']:
+                        st.success(f"★ {b}")
+            with col2:
+                st.markdown("#### 👥 Découvertes collaboratives")
+                if recos['suggestions_collaboratives']:
+                    for r in recos['suggestions_collaboratives']:
+                        st.markdown(f"- {r}")
+                else:
+                    st.info("Pas de nouvelles catégories à découvrir.")
+                st.markdown("#### 🔗 Profils similaires")
+                for nom, score in recos['utilisateurs_similaires']:
+                    st.markdown(f"- {nom} *(similarité : {score})*")
+
+# ════════════════════════════════════════════════════════════════════════════
+# PAGE 3 — ANALYSE STATISTIQUE
+# ════════════════════════════════════════════════════════════════════════════
+elif page == "📊 Analyse statistique":
+    st.subheader("Analyse statistique")
+
+    df_courant = st.session_state.df.copy()
+    # Garantir que interests et activity_log sont des listes Python
+    df_courant['interests']    = df_courant['interests'].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) else (list(x) if not isinstance(x, list) else x))
+    df_courant['activity_log'] = df_courant['activity_log'].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) else (list(x) if isinstance(x, (list, np.ndarray)) else x))
+    logs_clean = df_courant.dropna(subset=['interests', 'activity_log']).reset_index(drop=True)
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Utilisateurs", len(df_courant))
+    col2.metric("Logs nettoyés", len(logs_clean))
+    col3.metric("Intérêts disponibles", len(INTERESTS))
+
+    st.divider()
+
+    # Chi² distribution des intérêts vs Dirichlet
+    st.markdown("#### Test χ² — Distribution des intérêts (vs Dirichlet)")
+    tous_interets   = [i for liste in df_courant['interests'] for i in liste]
+    freq_interets   = pd.Series(tous_interets).value_counts()
+    observees       = [freq_interets.get(i, 0) for i in INTERESTS]
+    total           = sum(observees)
+    attendues       = [total * p for p in INTEREST_PROBS]
+    attendues_int   = [int(round(x)) for x in attendues]
+    attendues_int[-1] += total - sum(attendues_int)
+
+    df_chi = pd.DataFrame({'Intérêt': INTERESTS, 'Observé': observees, 'Attendu': attendues_int})
+    st.dataframe(df_chi.set_index('Intérêt'))
+
+    chi2, p_valeur = stats.chisquare(observees, attendues_int)
+    st.markdown(f"**χ² = {chi2:.2f}** | **p = {p_valeur:.4f}**")
+    if p_valeur < 0.05:
+        st.success("→ Distribution NON uniforme : certains intérêts sont significativement plus populaires ✅")
+    else:
+        st.info("→ Distribution conforme aux probabilités Dirichlet attendues")
+
+    st.divider()
+
+    # Chi² de contingence
+    st.markdown("#### Test χ² de contingence — Regarder du contenu IA → Acheter tech")
+    df_test = logs_clean.copy()
+    df_test['a_vu_ia']      = df_test['activity_log'].apply(lambda j: 1 if "regardé une conférence sur l'IA" in j else 0)
+    df_test['a_achete_ordi'] = df_test['activity_log'].apply(lambda j: 1 if 'acheté un ordinateur portable' in j else 0)
+    tableau = pd.crosstab(df_test['a_vu_ia'], df_test['a_achete_ordi'])
+    st.dataframe(tableau)
+    if tableau.shape == (2, 2):
+        chi2_c, p_c, dof, _ = stats.chi2_contingency(tableau)
+        st.markdown(f"**χ² = {chi2_c:.2f}** | **p = {p_c:.4f}** | dof = {dof}")
+        if p_c < 0.05:
+            st.success("→ Relation statistiquement significative ✅")
+        else:
+            st.warning("→ Aucune relation significative entre ces deux actions")
+
+# ════════════════════════════════════════════════════════════════════════════
+# PAGE 4 — VISUALISATIONS
+# ════════════════════════════════════════════════════════════════════════════
+elif page == "📈 Visualisations":
+    st.subheader("Visualisations")
+    sns.set_theme(style="whitegrid")
+
+    df_courant  = st.session_state.df.copy()
+    # Garantir que interests et activity_log sont des listes Python
+    df_courant['interests']    = df_courant['interests'].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) else (list(x) if not isinstance(x, list) else x))
+    df_courant['activity_log'] = df_courant['activity_log'].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) else (list(x) if isinstance(x, (list, np.ndarray)) else x))
+    df_courant = df_courant.dropna(subset=['interests', 'activity_log']).reset_index(drop=True)
+    tous_interets = [i for liste in df_courant['interests'] for i in liste]
+    freq_interets = pd.Series(tous_interets).value_counts()
+
+    tab1, tab2, tab3 = st.tabs([
+        "Répartition des intérêts",
+        "Heatmap activité × intérêt",
+        "Recommandations par segment"
+    ])
+
+    with tab1:
+        fig, ax = plt.subplots(figsize=(10, 5))
+        couleurs = sns.color_palette('Set2', len(freq_interets))
+        ax.bar(freq_interets.index, freq_interets.values, color=couleurs, edgecolor='white')
+        for i, v in enumerate(freq_interets.values):
+            ax.text(i, v + 0.5, str(v), ha='center', fontsize=10)
+        ax.set_title("Répartition des centres d'intérêt des utilisateurs", fontsize=13, fontweight='bold')
+        ax.set_xlabel("Intérêt")
+        ax.set_ylabel("Nombre d'utilisateurs")
+        plt.tight_layout()
+        st.pyplot(fig)
+
+    with tab2:
+        def detecter_type(action):
+            if action.startswith('regardé'):  return 'regardé'
+            if action.startswith('acheté'):   return 'acheté'
+            if action.startswith('aimé'):     return 'aimé'
+            if action.startswith('lu'):       return 'lu'
+            if action.startswith('partagé'):  return 'partagé'
+            if action.startswith('suivi'):    return 'suivi'
+            return 'autre'
+
+        lignes = []
+        for _, row in df_courant.iterrows():
+            if not isinstance(row['activity_log'], list): continue
+            for interet in row['interests']:
+                for action in row['activity_log']:
+                    lignes.append({'interet': interet, 'type_action': detecter_type(action)})
+
+        df_hm = pd.DataFrame(lignes)
+        matrice = df_hm.groupby(['type_action', 'interet']).size().unstack(fill_value=0)
+        fig, ax = plt.subplots(figsize=(14, 5))
+        sns.heatmap(matrice, annot=True, fmt='d', cmap='YlOrRd', linewidths=0.5, ax=ax,
+                    cbar_kws={'label': "Nombre d'occurrences"})
+        ax.set_title("Intensité d'activité par type d'action et catégorie d'intérêt", fontsize=13, fontweight='bold')
+        plt.tight_layout()
+        st.pyplot(fig)
+
+    with tab3:
+        df_seg = df_courant.copy()
+        df_seg['segment'] = pd.cut(df_seg['age'], bins=[17, 25, 35, 50, 65],
+                                    labels=['18-25', '26-35', '36-50', '51-65'])
+        comptage = {seg: {i: 0 for i in INTERESTS} for seg in ['18-25', '26-35', '36-50', '51-65']}
+        for _, row in df_seg.iterrows():
+            seg = str(row['segment'])
+            if seg == 'nan': continue
+            for interet in row['interests']:
+                if interet in comptage[seg]:
+                    comptage[seg][interet] += 1
+        df_plot = pd.DataFrame(comptage).T
+        df_plot.index.name = "Segment d'âge"
+        fig, ax = plt.subplots(figsize=(12, 6))
+        df_plot.plot(kind='bar', ax=ax, colormap='tab10', edgecolor='white')
+        ax.set_title("Catégories recommandées par segment d'utilisateurs", fontsize=13, fontweight='bold')
+        ax.set_xlabel("Segment d'âge")
+        ax.set_ylabel("Nombre de recommandations")
+        ax.legend(title='Intérêt', bbox_to_anchor=(1.01, 1), loc='upper left')
+        ax.tick_params(axis='x', rotation=0)
+        plt.tight_layout()
+        st.pyplot(fig)
