@@ -156,7 +156,6 @@ class MoteurRecommandation:
             return {
                 'suggestions_personnelles':   [],
                 'suggestions_collaboratives': [],
-                'bonus':                      [],
                 'utilisateurs_similaires':    [],
                 'top10_populaires':           self.top10_populaires,
             }
@@ -166,14 +165,7 @@ class MoteurRecommandation:
         listes_reco      = list(map(lambda i: RECOMMANDATIONS_PAR_INTERET[i], interets_valides))
         recos_perso      = reduce(lambda a, b: a + b, listes_reco) if listes_reco else []
 
-        # Bonus conditionnels
-        bonus = []
-        if any('IA' in a or 'programmation' in a for a in profil.activity_log):
-            bonus.append('Formation Deep Learning gratuite')
-        if any('acheté' in a for a in profil.activity_log):
-            bonus.append('Offre exclusive : -20% sur votre prochain achat')
-        if profil.age < 25:
-            bonus.append('Programme jeune talent : 1 mois premium offert')
+       
 
         # Recommandations collaboratives
         similaires = self.trouver_similaires(profil, top_n=5)
@@ -189,7 +181,6 @@ class MoteurRecommandation:
         return {
             'suggestions_personnelles':   recos_perso,
             'suggestions_collaboratives': recos_collab,
-            'bonus':                      bonus,
             'utilisateurs_similaires':    [(p.name, s) for p, s in similaires[:3]],
             'top10_populaires':           [],   # vide si l'utilisateur a des intérêts
         }
@@ -275,10 +266,7 @@ if page == "🏠 Recommandations":
             st.markdown("#### 🎯 Suggestions personnalisées")
             for r in recos['suggestions_personnelles']:
                 st.markdown(f"- {r}")
-            if recos['bonus']:
-                st.markdown("#### ★ Bonus")
-                for b in recos['bonus']:
-                    st.success(f"★ {b}")
+           
         with col2:
             st.markdown("#### 👥 Découvertes collaboratives")
             if recos['suggestions_collaboratives']:
@@ -291,7 +279,6 @@ if page == "🏠 Recommandations":
                 st.markdown(f"- {nom} *(similarité : {score})*")
 
     premium = ProfilPremium(profil.name, profil.age, profil.interests, profil.activity_log)
-    st.caption(f"💎 {premium.description()}")
 
 # ════════════════════════════════════════════════════════════════════════════
 # PAGE 2 — AJOUTER UN UTILISATEUR
@@ -346,10 +333,7 @@ elif page == "➕ Ajouter un utilisateur":
                     st.markdown("#### 🎯 Suggestions personnalisées")
                     for r in recos['suggestions_personnelles']:
                         st.markdown(f"- {r}")
-                    if recos['bonus']:
-                        st.markdown("#### ★ Bonus")
-                        for b in recos['bonus']:
-                            st.success(f"★ {b}")
+                   
                 with col2:
                     st.markdown("#### 👥 Découvertes collaboratives")
                     if recos['suggestions_collaboratives']:
