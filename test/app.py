@@ -85,8 +85,7 @@ class ProfilUtilisateur:
     def activity_log(self): return chaine_vers_liste(self.__activity_log)
 
     def vecteur_interets(self):
-        # Intérêts (pondération 2x) + comptage des actions par catégorie
-        v_interests = np.array([2.0 if i in self.interests else 0.0 for i in INTERESTS])
+        v_interests = np.array([1.0 if i in self.interests else 0.0 for i in INTERESTS])
         v_actions = np.zeros(len(INTERESTS))
         for idx, interet in enumerate(INTERESTS):
             actions_interet = ACTIVITY_MAPPING.get(interet, [])
@@ -165,18 +164,43 @@ class MoteurRecommandation:
         listes_reco      = list(map(lambda i: RECOMMANDATIONS_PAR_INTERET[i], interets_valides))
         recos_perso      = reduce(lambda a, b: a + b, listes_reco) if listes_reco else []
 
-       
 
         # Recommandations collaboratives
         similaires = self.trouver_similaires(profil, top_n=5)
-        interets_similaires = []
-        for autre_profil, _ in similaires:
-            interets_similaires.extend(autre_profil.interests)
-        nouveaux_interets = set(interets_similaires) - set(profil.interests)
         recos_collab = []
-        for interet in nouveaux_interets:
-            if interet in RECOMMANDATIONS_PAR_INTERET:
-                recos_collab.extend(RECOMMANDATIONS_PAR_INTERET[interet][:2])
+        if similaires:
+            # Étape 1 — Score des intérêts via les activités des similaires
+            # (capture ce que les similaires font vraiment, pas seulement leurs intérêts déclarés)
+            score_interets = {}
+            actions_cible  = set(profil.activity_log)
+            for autre_profil, sim_score in similaires:
+                # Intérêts déclarés des similaires, pondérés par similarité
+                for interet in autre_profil.interests:
+                    score_interets[interet] = score_interets.get(interet, 0) + sim_score * 2
+                # Intérêts inférés depuis les actions des similaires que le profil n'a pas faites
+                for action in autre_profil.activity_log:
+                    if action in actions_cible:
+                        continue
+                    for interet, actions in ACTIVITY_MAPPING.items():
+                        if action in actions:
+                            score_interets[interet] = score_interets.get(interet, 0) + sim_score
+                            break
+
+            interets_tries = sorted(score_interets.items(), key=lambda x: x[1], reverse=True)
+
+            # Étape 2 — Pour chaque intérêt scoré : prendre des contenus pas encore suggérés en perso
+            deja_recommandes = set(recos_perso)
+            for interet, _ in interets_tries:
+                if interet in RECOMMANDATIONS_PAR_INTERET:
+                    nouveaux = [r for r in RECOMMANDATIONS_PAR_INTERET[interet] if r not in deja_recommandes]
+                    recos_collab.extend(nouveaux[:2])
+                    deja_recommandes.update(nouveaux[:2])
+                if len(recos_collab) >= 6:
+                    break
+
+            # Étape 3 — Fallback : si toujours vide, compléter avec le top populaire global
+            if not recos_collab:
+                recos_collab = [r for r in self.top10_populaires if r not in set(recos_perso)][:6]
 
         return {
             'suggestions_personnelles':   recos_perso,
@@ -193,8 +217,12 @@ def charger_donnees():
         nb       = np.random.randint(1, 4)
         # Intérêts et activités stockés directement en chaîne 'elt1,elt2,...'
         interests    = liste_vers_chaine([str(x) for x in np.random.choice(INTERESTS, size=nb, replace=False, p=INTEREST_PROBS)])
-        chosen       = chaine_vers_liste(interests)
-        activity_log = liste_vers_chaine([str(np.random.choice(ACTIVITY_MAPPING[np.random.choice(chosen)])) for _ in range(np.random.randint(3, 7))])
+        # Les activités sont tirées sur TOUS les intérêts (pas seulement ceux de l'utilisateur)
+        # → crée de la diversité dans les vecteurs → similarités variées entre profils
+        activity_log = liste_vers_chaine([
+            str(np.random.choice(ACTIVITY_MAPPING[str(np.random.choice(INTERESTS))]))
+            for _ in range(np.random.randint(3, 7))
+        ])
         return {"name": fake.name(), "age": age, "interests": interests, "activity_log": activity_log}
 
     rows = [generate_user() for _ in range(500)]
@@ -261,22 +289,31 @@ if page == "🏠 Recommandations":
         for r in recos['top10_populaires']:
             st.markdown(f"- {r}")
     else:
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
+
         with col1:
             st.markdown("#### 🎯 Suggestions personnalisées")
+            st.caption("Basées sur vos intérêts et activités")
             for r in recos['suggestions_personnelles']:
                 st.markdown(f"- {r}")
-           
+
         with col2:
             st.markdown("#### 👥 Découvertes collaboratives")
+            st.caption("Basées sur les actions des profils similaires")
             if recos['suggestions_collaboratives']:
                 for r in recos['suggestions_collaboratives']:
                     st.markdown(f"- {r}")
             else:
-                st.info("Pas de nouvelles catégories à découvrir.")
+                st.info("Aucune découverte collaborative pour le moment.")
+
+        with col3:
             st.markdown("#### 🔗 Profils similaires")
-            for nom, score in recos['utilisateurs_similaires']:
-                st.markdown(f"- {nom} *(similarité : {score})*")
+            st.caption("Utilisateurs avec des goûts proches (similarité cosinus)")
+            if recos['utilisateurs_similaires']:
+                for nom, score in recos['utilisateurs_similaires']:
+                    st.markdown(f"- **{nom}** *(score : {score})*")
+            else:
+                st.info("Aucun profil similaire trouvé.")
 
     premium = ProfilPremium(profil.name, profil.age, profil.interests, profil.activity_log)
 
@@ -328,22 +365,28 @@ elif page == "➕ Ajouter un utilisateur":
                 for r in recos['top10_populaires']:
                     st.markdown(f"- {r}")
             else:
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
                 with col1:
                     st.markdown("#### 🎯 Suggestions personnalisées")
+                    st.caption("Basées sur vos intérêts et activités")
                     for r in recos['suggestions_personnelles']:
                         st.markdown(f"- {r}")
-                   
                 with col2:
                     st.markdown("#### 👥 Découvertes collaboratives")
+                    st.caption("Basées sur les actions des profils similaires")
                     if recos['suggestions_collaboratives']:
                         for r in recos['suggestions_collaboratives']:
                             st.markdown(f"- {r}")
                     else:
-                        st.info("Pas de nouvelles catégories à découvrir.")
+                        st.info("Aucune découverte collaborative pour le moment.")
+                with col3:
                     st.markdown("#### 🔗 Profils similaires")
-                    for nom, score in recos['utilisateurs_similaires']:
-                        st.markdown(f"- {nom} *(similarité : {score})*")
+                    st.caption("Utilisateurs avec des goûts proches (similarité cosinus)")
+                    if recos['utilisateurs_similaires']:
+                        for nom, score in recos['utilisateurs_similaires']:
+                            st.markdown(f"- **{nom}** *(score : {score})*")
+                    else:
+                        st.info("Aucun profil similaire trouvé.")
 
 # ════════════════════════════════════════════════════════════════════════════
 # PAGE 3 — ANALYSE STATISTIQUE
