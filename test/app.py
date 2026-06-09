@@ -7,7 +7,6 @@ from scipy import stats
 from scipy.spatial.distance import cosine
 from functools import reduce
 from faker import Faker
-import ast
 import random
 
 st.set_page_config(page_title="Générateur de contenu IA", page_icon="🎯", layout="wide")
@@ -52,21 +51,47 @@ RECOMMANDATIONS_PAR_INTERET = {
     "photographie": ["Cours photo débutant","Tutoriel Lightroom","Guide composition et cadrage","Top appareils photo 2024","Guide astrophotographie","Inspiration photo de rue"],
 }
 
+# ── Fonctions utilitaires : conversion chaîne ↔ liste ────────────────────────
+def liste_vers_chaine(lst):
+    """Convertit une liste ['a', 'b', 'c'] en chaîne 'a,b,c'."""
+    return ",".join(lst)
+
+def chaine_vers_liste(s):
+    """Convertit une chaîne 'a,b,c' en liste ['a', 'b', 'c'].
+    Retourne une liste vide si la valeur est absente."""
+    if not isinstance(s, str) or s.strip() == "":
+        return []
+    return [elt.strip() for elt in s.split(",")]
+
 # ── Classes POO ───────────────────────────────────────────────────────────────
 class ProfilUtilisateur:
+    """Les attributs interests et activity_log sont stockés en interne
+    sous forme de chaîne 'elt1,elt2,...' et exposés en liste via propriétés."""
+
     def __init__(self, name, age, interests, activity_log):
-        self.__name       = name
-        self.__age        = age
-        self.interests    = interests
-        self.activity_log = activity_log
+        self.__name         = name
+        self.__age          = age
+        # Accepte liste ou chaîne en entrée, stocke toujours en chaîne
+        self.__interests    = liste_vers_chaine(interests)    if isinstance(interests, list)    else interests
+        self.__activity_log = liste_vers_chaine(activity_log) if isinstance(activity_log, list) else activity_log
 
     @property
-    def name(self): return self.__name
+    def name(self):         return self.__name
     @property
-    def age(self):  return self.__age
+    def age(self):          return self.__age
+    @property
+    def interests(self):    return chaine_vers_liste(self.__interests)
+    @property
+    def activity_log(self): return chaine_vers_liste(self.__activity_log)
 
     def vecteur_interets(self):
-        return np.array([1 if i in self.interests else 0 for i in INTERESTS], dtype=float)
+        # Intérêts (pondération 2x) + comptage des actions par catégorie
+        v_interests = np.array([2.0 if i in self.interests else 0.0 for i in INTERESTS])
+        v_actions = np.zeros(len(INTERESTS))
+        for idx, interet in enumerate(INTERESTS):
+            actions_interet = ACTIVITY_MAPPING.get(interet, [])
+            v_actions[idx] = sum(1 for a in self.activity_log if a in actions_interet)
+        return v_interests + v_actions
 
     def description(self):
         return f"Utilisateur standard : {self.__name}, {self.__age} ans"
@@ -84,27 +109,64 @@ class ProfilPremium(ProfilUtilisateur):
 class MoteurRecommandation:
     def __init__(self, df):
         self.profils = [
-            ProfilUtilisateur(row['name'], row['age'], row['interests'], row['activity_log'])
+            ProfilUtilisateur(
+                row['name'], row['age'],
+                row['interests'],    # chaîne CSV dans le DataFrame
+                row['activity_log']  # chaîne CSV dans le DataFrame
+            )
             for _, row in df.iterrows()
         ]
+        # Calcul du top 10 des contenus les plus populaires (basé sur les intérêts du dataset)
+        self.top10_populaires = self._calculer_top10(df)
+
+    def _calculer_top10(self, df):
+        """Calcule les 10 contenus les plus populaires en comptant
+        combien d'utilisateurs ont chaque intérêt, puis en prenant
+        les premières recommandations des intérêts les plus fréquents."""
+        tous_interets = [i for s in df['interests'] for i in chaine_vers_liste(str(s)) if i]
+        freq = pd.Series(tous_interets).value_counts()
+        top_interets = freq.index.tolist()   # intérêts triés du plus au moins populaire
+        populaires = []
+        for interet in top_interets:
+            if interet in RECOMMANDATIONS_PAR_INTERET:
+                populaires.extend(RECOMMANDATIONS_PAR_INTERET[interet][:2])
+            if len(populaires) >= 10:
+                break
+        return populaires[:10]
 
     def trouver_similaires(self, profil, top_n=5):
         vecteur_cible = profil.vecteur_interets()
+        # Si le vecteur cible est nul, impossible de calculer la similarité cosinus
+        if not np.any(vecteur_cible):
+            return []
         sims = []
         for autre in self.profils:
             if autre.name == profil.name: continue
             v = autre.vecteur_interets()
-            if np.any(v):
-                sims.append((autre, round(1 - cosine(vecteur_cible, v), 3)))
+            if not np.any(v): continue
+            sim = 1 - cosine(vecteur_cible, v)
+            # Ignorer les nan (division par zéro dans cosine)
+            if np.isnan(sim): continue
+            sims.append((autre, round(sim, 3)))
         return sorted(sims, key=lambda x: x[1], reverse=True)[:top_n]
 
     def recommander(self, profil):
-        # Recommandations personnelles via filter / map / reduce
+        # Cas sans intérêts : on retourne le top 10 des contenus populaires
+        if not profil.interests:
+            return {
+                'suggestions_personnelles':   [],
+                'suggestions_collaboratives': [],
+                'bonus':                      [],
+                'utilisateurs_similaires':    [],
+                'top10_populaires':           self.top10_populaires,
+            }
+
+        # filter / map / reduce sur la liste d'intérêts
         interets_valides = list(filter(lambda i: i in RECOMMANDATIONS_PAR_INTERET, profil.interests))
         listes_reco      = list(map(lambda i: RECOMMANDATIONS_PAR_INTERET[i], interets_valides))
         recos_perso      = reduce(lambda a, b: a + b, listes_reco) if listes_reco else []
 
-        # Bonus conditionnels selon les activités
+        # Bonus conditionnels
         bonus = []
         if any('IA' in a or 'programmation' in a for a in profil.activity_log):
             bonus.append('Formation Deep Learning gratuite')
@@ -129,48 +191,41 @@ class MoteurRecommandation:
             'suggestions_collaboratives': recos_collab,
             'bonus':                      bonus,
             'utilisateurs_similaires':    [(p.name, s) for p, s in similaires[:3]],
+            'top10_populaires':           [],   # vide si l'utilisateur a des intérêts
         }
 
 # ── Chargement des données ────────────────────────────────────────────────────
 @st.cache_data
 def charger_donnees():
     def generate_user():
-        age = int(np.random.randint(18, 66))
-        nb  = np.random.randint(1, 4)
-        interests    = [str(x) for x in np.random.choice(INTERESTS, size=nb, replace=False, p=INTEREST_PROBS)]
-        activity_log = [str(np.random.choice(ACTIVITY_MAPPING[np.random.choice(interests)])) for _ in range(np.random.randint(3, 7))]
+        age      = int(np.random.randint(18, 66))
+        nb       = np.random.randint(1, 4)
+        # Intérêts et activités stockés directement en chaîne 'elt1,elt2,...'
+        interests    = liste_vers_chaine([str(x) for x in np.random.choice(INTERESTS, size=nb, replace=False, p=INTEREST_PROBS)])
+        chosen       = chaine_vers_liste(interests)
+        activity_log = liste_vers_chaine([str(np.random.choice(ACTIVITY_MAPPING[np.random.choice(chosen)])) for _ in range(np.random.randint(3, 7))])
         return {"name": fake.name(), "age": age, "interests": interests, "activity_log": activity_log}
 
     rows = [generate_user() for _ in range(500)]
     df   = pd.DataFrame(rows)
-
-    # S'assurer que interests et activity_log sont des listes Python (pas des np.array)
-    df['interests']    = df['interests'].apply(lambda x: list(x) if not isinstance(x, list) else x)
-    df['activity_log'] = df['activity_log'].apply(lambda x: list(x) if not isinstance(x, list) else x)
-
+    # interests et activity_log sont déjà des chaînes 'elt1,elt2,...'
+    # → drop_duplicates fonctionne directement, sans colonnes temporaires
     df['age'] = df['age'].astype(float)
 
     # Injection de bruit
     df.loc[np.random.choice(500, 25, replace=False), 'age'] = np.nan
     df.loc[np.random.choice(500, 15, replace=False), 'activity_log'] = None
+
     df = pd.concat([df, df.sample(n=10, random_state=42)], ignore_index=True)
 
-    # Nettoyage — utiliser des colonnes string pour la déduplication (les listes ne sont pas hashables)
+    # Nettoyage simple — drop_duplicates marche directement sur des chaînes
+    df = df.drop_duplicates(subset=['name', 'age', 'interests', 'activity_log'])
     df = df.dropna(subset=['age', 'activity_log']).reset_index(drop=True)
-    df['_interests_str']    = df['interests'].apply(str)
-    df['_activity_log_str'] = df['activity_log'].apply(str)
-    df = df.drop_duplicates(subset=['name', 'age', '_interests_str', '_activity_log_str'])
-    df = df.drop(columns=['_interests_str', '_activity_log_str']).reset_index(drop=True)
-
-    # Garantir que les colonnes listes sont bien des listes Python après toutes les opérations
-    df['interests']    = df['interests'].apply(lambda x: list(x) if not isinstance(x, list) else x)
-    df['activity_log'] = df['activity_log'].apply(lambda x: list(x) if not isinstance(x, list) else x)
 
     return df
 
 df = charger_donnees()
 
-# Moteur dans session_state pour qu'il persiste entre les interactions
 if 'moteur' not in st.session_state:
     st.session_state.moteur = MoteurRecommandation(df)
 if 'df' not in st.session_state:
@@ -204,33 +259,37 @@ if page == "🏠 Recommandations":
     profil = next(p for p in moteur.profils if p.name == nom_selectionne)
     recos  = moteur.recommander(profil)
 
-    st.markdown(f"**Âge :** {profil.age} ans &nbsp;|&nbsp; **Intérêts :** {', '.join(profil.interests)}")
-    st.markdown(f"**Journal d'activité :** {', '.join(profil.activity_log)}")
+    # .interests et .activity_log retournent des listes via les propriétés
+    st.markdown(f"**Âge :** {profil.age} ans &nbsp;|&nbsp; **Intérêts :** {', '.join(profil.interests) if profil.interests else '_(aucun)_'}")
+    st.markdown(f"**Journal d'activité :** {', '.join(profil.activity_log) if profil.activity_log else '_(aucune activité)_'}")
     st.divider()
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("#### 🎯 Suggestions personnalisées")
-        for r in recos['suggestions_personnelles']:
+    # Cas sans intérêts : afficher le top 10 populaire
+    if recos['top10_populaires']:
+        st.info("ℹ️ Aucun intérêt renseigné — voici les **10 contenus les plus populaires** du moment :")
+        for r in recos['top10_populaires']:
             st.markdown(f"- {r}")
-        if recos['bonus']:
-            st.markdown("#### ★ Bonus")
-            for b in recos['bonus']:
-                st.success(f"★ {b}")
-
-    with col2:
-        st.markdown("#### 👥 Découvertes collaboratives")
-        if recos['suggestions_collaboratives']:
-            for r in recos['suggestions_collaboratives']:
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### 🎯 Suggestions personnalisées")
+            for r in recos['suggestions_personnelles']:
                 st.markdown(f"- {r}")
-        else:
-            st.info("Pas de nouvelles catégories à découvrir.")
-        st.markdown("#### 🔗 Profils similaires")
-        for nom, score in recos['utilisateurs_similaires']:
-            st.markdown(f"- {nom} *(similarité : {score})*")
+            if recos['bonus']:
+                st.markdown("#### ★ Bonus")
+                for b in recos['bonus']:
+                    st.success(f"★ {b}")
+        with col2:
+            st.markdown("#### 👥 Découvertes collaboratives")
+            if recos['suggestions_collaboratives']:
+                for r in recos['suggestions_collaboratives']:
+                    st.markdown(f"- {r}")
+            else:
+                st.info("Pas de nouvelles catégories à découvrir.")
+            st.markdown("#### 🔗 Profils similaires")
+            for nom, score in recos['utilisateurs_similaires']:
+                st.markdown(f"- {nom} *(similarité : {score})*")
 
-    # Démonstration polymorphisme
     premium = ProfilPremium(profil.name, profil.age, profil.interests, profil.activity_log)
     st.caption(f"💎 {premium.description()}")
 
@@ -247,7 +306,6 @@ elif page == "➕ Ajouter un utilisateur":
     with col2:
         nouveaux_interets = st.multiselect("Intérêts", options=INTERESTS, default=["fitness"])
 
-    # Actions disponibles selon les intérêts sélectionnés
     actions_disponibles = []
     for i in nouveaux_interets:
         actions_disponibles.extend(ACTIVITY_MAPPING.get(i, []))
@@ -260,42 +318,48 @@ elif page == "➕ Ajouter un utilisateur":
     if st.button("✅ Ajouter et générer les recommandations"):
         if not nouveau_nom:
             st.error("Le nom est obligatoire.")
-        elif not nouveaux_interets:
-            st.error("Sélectionnez au moins un intérêt.")
         else:
+            # On passe des listes ; le constructeur les convertit en chaîne
             nouveau_profil = ProfilUtilisateur(nouveau_nom, nouveau_age, nouveaux_interets, nouvelles_actions)
             st.session_state.moteur.profils.append(nouveau_profil)
 
             nouvelle_ligne = pd.DataFrame([{
-                'name': nouveau_nom, 'age': float(nouveau_age),
-                'interests': nouveaux_interets, 'activity_log': nouvelles_actions
+                'name':        nouveau_nom,
+                'age':         float(nouveau_age),
+                'interests':   liste_vers_chaine(nouveaux_interets),   # chaîne dans le DataFrame
+                'activity_log':liste_vers_chaine(nouvelles_actions),
             }])
             st.session_state.df = pd.concat([st.session_state.df, nouvelle_ligne], ignore_index=True)
 
             recos = st.session_state.moteur.recommander(nouveau_profil)
-
             st.success(f"✅ **{nouveau_nom}** ajouté avec succès !")
             st.divider()
 
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### 🎯 Suggestions personnalisées")
-                for r in recos['suggestions_personnelles']:
+            # Cas sans intérêts : afficher le top 10 populaire
+            if recos['top10_populaires']:
+                st.info("ℹ️ Aucun intérêt renseigné — voici les **10 contenus les plus populaires** du moment :")
+                for r in recos['top10_populaires']:
                     st.markdown(f"- {r}")
-                if recos['bonus']:
-                    st.markdown("#### ★ Bonus")
-                    for b in recos['bonus']:
-                        st.success(f"★ {b}")
-            with col2:
-                st.markdown("#### 👥 Découvertes collaboratives")
-                if recos['suggestions_collaboratives']:
-                    for r in recos['suggestions_collaboratives']:
+            else:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("#### 🎯 Suggestions personnalisées")
+                    for r in recos['suggestions_personnelles']:
                         st.markdown(f"- {r}")
-                else:
-                    st.info("Pas de nouvelles catégories à découvrir.")
-                st.markdown("#### 🔗 Profils similaires")
-                for nom, score in recos['utilisateurs_similaires']:
-                    st.markdown(f"- {nom} *(similarité : {score})*")
+                    if recos['bonus']:
+                        st.markdown("#### ★ Bonus")
+                        for b in recos['bonus']:
+                            st.success(f"★ {b}")
+                with col2:
+                    st.markdown("#### 👥 Découvertes collaboratives")
+                    if recos['suggestions_collaboratives']:
+                        for r in recos['suggestions_collaboratives']:
+                            st.markdown(f"- {r}")
+                    else:
+                        st.info("Pas de nouvelles catégories à découvrir.")
+                    st.markdown("#### 🔗 Profils similaires")
+                    for nom, score in recos['utilisateurs_similaires']:
+                        st.markdown(f"- {nom} *(similarité : {score})*")
 
 # ════════════════════════════════════════════════════════════════════════════
 # PAGE 3 — ANALYSE STATISTIQUE
@@ -304,28 +368,25 @@ elif page == "📊 Analyse statistique":
     st.subheader("Analyse statistique")
 
     df_courant = st.session_state.df.copy()
-    # Garantir que interests et activity_log sont des listes Python
-    df_courant['interests']    = df_courant['interests'].apply(
-        lambda x: ast.literal_eval(x) if isinstance(x, str) else (list(x) if not isinstance(x, list) else x))
-    df_courant['activity_log'] = df_courant['activity_log'].apply(
-        lambda x: ast.literal_eval(x) if isinstance(x, str) else (list(x) if isinstance(x, (list, np.ndarray)) else x))
+    # interests et activity_log sont des chaînes 'elt1,elt2,...' → on split pour itérer
+    df_courant['interests_list']    = df_courant['interests'].apply(chaine_vers_liste)
+    df_courant['activity_log_list'] = df_courant['activity_log'].apply(chaine_vers_liste)
     logs_clean = df_courant.dropna(subset=['interests', 'activity_log']).reset_index(drop=True)
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Utilisateurs", len(df_courant))
     col2.metric("Logs nettoyés", len(logs_clean))
     col3.metric("Intérêts disponibles", len(INTERESTS))
-
     st.divider()
 
     # Chi² distribution des intérêts vs Dirichlet
     st.markdown("#### Test χ² — Distribution des intérêts (vs Dirichlet)")
-    tous_interets   = [i for liste in df_courant['interests'] for i in liste]
-    freq_interets   = pd.Series(tous_interets).value_counts()
-    observees       = [freq_interets.get(i, 0) for i in INTERESTS]
-    total           = sum(observees)
-    attendues       = [total * p for p in INTEREST_PROBS]
-    attendues_int   = [int(round(x)) for x in attendues]
+    tous_interets = [i for liste in df_courant['interests_list'] for i in liste]
+    freq_interets = pd.Series(tous_interets).value_counts()
+    observees     = [freq_interets.get(i, 0) for i in INTERESTS]
+    total         = sum(observees)
+    attendues     = [total * p for p in INTEREST_PROBS]
+    attendues_int = [int(round(x)) for x in attendues]
     attendues_int[-1] += total - sum(attendues_int)
 
     df_chi = pd.DataFrame({'Intérêt': INTERESTS, 'Observé': observees, 'Attendu': attendues_int})
@@ -337,14 +398,13 @@ elif page == "📊 Analyse statistique":
         st.success("→ Distribution NON uniforme : certains intérêts sont significativement plus populaires ✅")
     else:
         st.info("→ Distribution conforme aux probabilités Dirichlet attendues")
-
     st.divider()
 
     # Chi² de contingence
     st.markdown("#### Test χ² de contingence — Regarder du contenu IA → Acheter tech")
     df_test = logs_clean.copy()
-    df_test['a_vu_ia']      = df_test['activity_log'].apply(lambda j: 1 if "regardé une conférence sur l'IA" in j else 0)
-    df_test['a_achete_ordi'] = df_test['activity_log'].apply(lambda j: 1 if 'acheté un ordinateur portable' in j else 0)
+    df_test['a_vu_ia']       = df_test['activity_log'].apply(lambda s: 1 if "regardé une conférence sur l'IA" in chaine_vers_liste(s) else 0)
+    df_test['a_achete_ordi'] = df_test['activity_log'].apply(lambda s: 1 if 'acheté un ordinateur portable' in chaine_vers_liste(s) else 0)
     tableau = pd.crosstab(df_test['a_vu_ia'], df_test['a_achete_ordi'])
     st.dataframe(tableau)
     if tableau.shape == (2, 2):
@@ -362,14 +422,13 @@ elif page == "📈 Visualisations":
     st.subheader("Visualisations")
     sns.set_theme(style="whitegrid")
 
-    df_courant  = st.session_state.df.copy()
-    # Garantir que interests et activity_log sont des listes Python
-    df_courant['interests']    = df_courant['interests'].apply(
-        lambda x: ast.literal_eval(x) if isinstance(x, str) else (list(x) if not isinstance(x, list) else x))
-    df_courant['activity_log'] = df_courant['activity_log'].apply(
-        lambda x: ast.literal_eval(x) if isinstance(x, str) else (list(x) if isinstance(x, (list, np.ndarray)) else x))
+    df_courant = st.session_state.df.copy()
     df_courant = df_courant.dropna(subset=['interests', 'activity_log']).reset_index(drop=True)
-    tous_interets = [i for liste in df_courant['interests'] for i in liste]
+    # Colonnes listes construites à partir des chaînes pour les visualisations
+    df_courant['interests_list']    = df_courant['interests'].apply(chaine_vers_liste)
+    df_courant['activity_log_list'] = df_courant['activity_log'].apply(chaine_vers_liste)
+
+    tous_interets = [i for liste in df_courant['interests_list'] for i in liste]
     freq_interets = pd.Series(tous_interets).value_counts()
 
     tab1, tab2, tab3 = st.tabs([
@@ -402,12 +461,11 @@ elif page == "📈 Visualisations":
 
         lignes = []
         for _, row in df_courant.iterrows():
-            if not isinstance(row['activity_log'], list): continue
-            for interet in row['interests']:
-                for action in row['activity_log']:
+            for interet in row['interests_list']:
+                for action in row['activity_log_list']:
                     lignes.append({'interet': interet, 'type_action': detecter_type(action)})
 
-        df_hm = pd.DataFrame(lignes)
+        df_hm   = pd.DataFrame(lignes)
         matrice = df_hm.groupby(['type_action', 'interet']).size().unstack(fill_value=0)
         fig, ax = plt.subplots(figsize=(14, 5))
         sns.heatmap(matrice, annot=True, fmt='d', cmap='YlOrRd', linewidths=0.5, ax=ax,
@@ -424,7 +482,7 @@ elif page == "📈 Visualisations":
         for _, row in df_seg.iterrows():
             seg = str(row['segment'])
             if seg == 'nan': continue
-            for interet in row['interests']:
+            for interet in row['interests_list']:
                 if interet in comptage[seg]:
                     comptage[seg][interet] += 1
         df_plot = pd.DataFrame(comptage).T
